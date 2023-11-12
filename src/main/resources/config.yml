@@ -1,0 +1,14 @@
+# Config.yml for Database
+server:
+  isDev: false
+
+database:
+  # Disable isSQL to use Filetree. Will ignore all login values. Must have enabled to true to use SQL or Filetree. False will disable both.
+  enabled:
+  isSQL:
+  host:
+  port:
+  username:
+  database:
+  password:
+  timeout: 5

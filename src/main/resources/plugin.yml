@@ -1,0 +1,9 @@
+name: Main
+version: '0.2'
+main: net.voidedsky.voidedbaseapi.Main
+api-version: 1.20
+prefix: VoidedDatabase
+load: STARTUP
+authors: [Anomalia]
+description: VoidedSky SQL API
+website: https://www.voidedsky.net
