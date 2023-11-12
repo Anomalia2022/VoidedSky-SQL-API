@@ -2,8 +2,10 @@ package net.voidedsky.voidedbaseapi.database;
 
 
 import net.cybercake.cyberapi.spigot.basic.BetterStackTraces;
+import net.cybercake.cyberapi.spigot.chat.Broadcast;
 import net.cybercake.cyberapi.spigot.chat.Log;
 import net.voidedsky.voidedbaseapi.Main;
+import net.voidedsky.voidedbaseapi.database.utils.DatabaseInvalidator;
 import org.bukkit.Bukkit;
 
 import java.sql.Connection;
@@ -16,14 +18,26 @@ public class DatabaseHandler {
 
     // High-importance variables
 
-    private static Connection connection; // Connection to the database
-
     public static boolean isConnected = false; // Not connected by default
 
     public static boolean isSQL = true; // Set false if system has been set to filetree or has fallen back to filetree
 
+    public static boolean isDatabaseDown = false;
+
+    public static long databaseStartTime = 0L;
+
+    public static long databaseEndTime = 0L; // If database is down, it can calculate the time it was up until it went down
+
+    private static Connection connection; // Connection to the database
+
+    // Getter for the connection variable
+    public static Connection getConnection() {
+        return DatabaseHandler.connection;
+    }
+
+
     // Call to restart, refresh, or reconnect to the Database
-    public static void refreshDatabase(boolean isSQL) {
+    public static void refreshDatabase(boolean isReloadCommand) {
         // Don't run either Database if it is disabled or if the server is in developer mode
         if (Main.getConf().getBoolean("server.isDev") || !Main.getConf().getBoolean("database.enabled")) {
             Log.info("Database is disabled! Set database.enabled to true or isDev to false in the plugin's config.yml to enable!");
@@ -31,10 +45,10 @@ public class DatabaseHandler {
             return;
         }
 
-        if(isSQL) {
+        if(Main.getConf().getBoolean("database.isSQL")) {
             // If true connect to mySQL
             try {
-                setConnection();
+                setConnection(isReloadCommand);
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
@@ -47,7 +61,7 @@ public class DatabaseHandler {
 
 
     // Low scope class to handle connection ot the database
-    private static void setConnection() throws SQLException {
+    private static void setConnection(boolean isReloadCommand) throws SQLException {
 
         // Get start time of connect attempt; Used to calculate time to connect
         long mssDatabase = System.currentTimeMillis();
@@ -70,17 +84,43 @@ public class DatabaseHandler {
                 Log.info("SQL Database Connection Created! Time elapsed: " + (System.currentTimeMillis() - mssDatabase) + "ms!");
                 // Check if the connection is fully successful or ignore if it failed and falls back to filetree
                 if(!connection.isClosed() && connection.isValid(Main.getConf().getInt("database.timeout"))) {
+
+                    if(isReloadCommand) {
+                        // Check if the reload was successful and report the outcome
+                        if(DatabaseHandler.getConnection().isValid(Main.getConf().getInt("database.timeout")) && !DatabaseHandler.getConnection().isClosed()) {
+                            Broadcast.chat(Main.getConf().getString("prefix") + "&aDatabase has been successfully reloaded!", "sysadmin.database");
+                        } else {
+                            Broadcast.chat(Main.getConf().getString("errorPrefix") + "&cDatabase failed to reconnect! Please ensure Database is online and connection information is correct in your config.yml!", "sysadmin.database");
+                            DatabaseHandler.isConnected = false;
+                            DatabaseHandler.isDatabaseDown = true;
+                            DatabaseHandler.databaseEndTime = System.currentTimeMillis();
+                        }
+                    }
+                    // SQL connection is valid and successful
                     Log.info("SQL Database Connection Valid!");
+                    databaseStartTime = System.currentTimeMillis();
                     isSQL = true;
                     isConnected = true;
+
+                    // Run the Database Invalidator after 10 minutes and continue to run it every 10 minutes.
+                    Bukkit.getScheduler().runTaskTimerAsynchronously(Main.getInstance(), new DatabaseInvalidator(), 20, 12000);
                 } else {
-                    Log.error("SQL Database Connection is invalid or didn't connect! Killing SQL attempts and falling back to filetree. Run \"/database reload\" to attempt a reconnect");
-                    Bukkit.broadcast("SQL Database Connect Invalid! Falling back to Filetree! Run \"/database reload\" to attempt a reconnect", "sysadmin.database");
+                    // SQL connection is invalid and unsuccessful
+                    Broadcast.chat(Main.getConf().getString("errorPrefix") + "&cSQL Database Connect Invalid! Falling back to Filetree! Run \"/database reload\" to attempt to reconnect", "sysadmin.database");
                     isSQL = filetreeRefresh();
                 }
             } catch (SQLException e) {
-                Log.error("SQL Database Connect Failed! Falling back to Filetree! Run \"/database reload\" to attempt a reconnect\"");
-                Bukkit.broadcast("SQL Database Connect Failed! Falling back to Filetree! Run \"/database reload\" to attempt a reconnect", "sysadmin.database");
+                // Run this if this was done via the reload command
+                if(isReloadCommand) {
+                    DatabaseHandler.isConnected = false;
+                    DatabaseHandler.isDatabaseDown = true;
+                    DatabaseHandler.databaseEndTime = System.currentTimeMillis();
+                    Broadcast.chat(Main.getConf().getString("errorPrefix") + "Reloading of Database Failed!", "sysadmin.database");
+                    return;
+                }
+
+                // Fallback to file tree if this failed not by the reload command
+                Broadcast.chat(Main.getConf().getString("errorPrefix") + "&cSQL Database Connect Failed! Falling back to Filetree! Run \"/database reload\" to attempt to reconnect", "sysadmin.database");
                 isSQL = filetreeRefresh();
             }
         });
@@ -100,7 +140,7 @@ public class DatabaseHandler {
                 Log.info("Database Connection is already closed or never existed!");
             }
         } catch (SQLException e) {
-            Log.error("Database Connection failed to close properly!!!");
+            Log.error("Database Connection failed to close properly!");
             throw new RuntimeException(e);
         }
     }

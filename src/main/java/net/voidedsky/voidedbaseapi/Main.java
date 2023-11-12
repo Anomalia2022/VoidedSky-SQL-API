@@ -34,8 +34,7 @@ public final class Main extends CyberAPI {
         reloadConfig();
         Log.info("Loaded main configuration!");
 
-        DatabaseHandler.refreshDatabase(Main.getConf().getBoolean("database.isSQL"));
-
+        DatabaseHandler.refreshDatabase(false);
     }
 
     @Override

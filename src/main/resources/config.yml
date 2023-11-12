@@ -2,6 +2,10 @@
 server:
   isDev: false
 
+prefix: '&8[&a●&8]&r '
+warnPrefix: '&8[&e●&8]&r '
+errorPrefix: '&8[&c●&8]&r '
+
 database:
   # Disable isSQL to use Filetree. Will ignore all login values. Must have enabled to true to use SQL or Filetree. False will disable both.
   enabled:
